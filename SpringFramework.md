@@ -125,15 +125,16 @@ setter注入：setter注入格式比较固定。
 	</bean>
 		
 4.管理第三方bean:需要自己去研究使用哪一种注入(setter or 构造器)
-		
-5.在XML配置文件中引入并使用properties等配置文件的属性(同名属性会覆盖)	
+	
+
+<span id="jump1">5.在XML配置文件中引入并使用properties等配置文件的属性(同名属性会覆盖)</span>
 	
 	1.在XML中开启context命名空间
 	2.使用<context:property-placeholder location="classPath:文件名">, *.类型标识读取所有该类型的配置文件
 	3.在需要填入的值中使用"${属性名}"，如value = "${mysql.user}"
 		
-6.BeanFactory：所有容器的顶层接口，用作容器时所有bean都是延迟加载，即要注入时才创建bean对象存入容器中。
-  ApplicationContext作为容器是即时加载。
+6.BeanFactory：IoC容器的顶层接口，用作容器时所有bean都是延迟加载，即要注入时才创建bean对象存入容器中。
+  ApplicationContext是spring的核心容器，即时加载Bean。
 		
 		
 注意：bean通过类型注入时（比如getBean(Class<T>)）可以传递接口类型或者父类类型，spring会返回对应实现类/子类的实例对象。
@@ -147,36 +148,144 @@ setter注入：setter注入格式比较固定。
 	因此，即使你注册的是ServiceImpl，Spring会记录它的类型信息（包括它实现的接口Service），
 	使得通过接口类型Service.class也能找到该bean，并且返回ServiceImpl的实例。
 
+7.注解开发
+
+早期spring使用注解开发需要在配置文件中开辟命名空间，指定扫描的bean包路径，并且要指定Bean名，否则要用类别获取bean。
+		
+纯注解开发模式：将XML配置文件转换成Java配置类
+		
+	@Configuration:代表了XML配置文件的整体结构
+	@ComponentScan(.....)==原配置文件中指定扫描bean的包路径的标签<context:component-scan .......>
+	@PropertiySource({"配置文件类路径1","....."})，相当于第五点，之后bean中就可以通过"${}"来使用配置文件中的属性了(#id=jump1)
+	@Import(其他类)：可以导入其他类的bean
+
+8.bean管理		
+
+	@Bean：将方法返回值注册为bean对象。
+	@Component:将该类注册为bean	
+	@Scope:作用域，单列 or 非单例
+	@PostConstruct:注解方法，指定该方法为init初始化方法
+	@PreDestroy:注解方法，指定该方法为销毁方法。
+
+9.自动装配
+	
+	1.@Autowired实现自动注入，默认使用类型注入，存在同类型报错。
+	-搭配@Qualifier(bean名字)可以指定要注入的bean。
+	-底层基于反射创建对象，并暴力反射为对应的私有属性初始化数据，不需要setter方法。
+	-推荐使用无参构造
+	-@Value("${xxx}")与配置类中对应的配置文件注解使用，配置自动注入时该基本类型的值。
+		
+10.第三方Bean管理	
+		
+	一般使用一个单独的类来控制，然后在配置类中@Import({控制类.class,......})
+	控制类中写什么？总的说，就是@Bean
+	
+	1.@Bean注释方法，表示该方法的返回值作为bean存入容器中。
+	2.方法中想要自动注入参数？分基本数据类型和引用数据类型
+		-基本数据类型:控制类中声明变量+@Value
+		-引用数据类型：声明在该方法的形参中，spring自动注入。!!!!!!!!!!
+
+11.spring整合MyBatis
+	
+	需要导入JDBC和Mybatis与spring整合的依赖
+			
+	XML配置整合Mybatis、注解整合Mybatis
+	两种方式类似，最主要是配置SqlSessionFactory，注册Bean到容器中。
+
+	主要的两个bean：SqlSessionFactoryBean和MappperScannerConfigurer
+		
+12.spring整合JUnit:在src下创建test文件，一般被测类层级与在main包中层级一致。
+	
+	@Runwith(SpringJUnit4ClassRunner.class):指定类运行器
+	@ContextConfiguration(classes=配置类.class)：指定spring的配置类，以使用bean
+			
+13.	AOP: Aspect Oriented Programming面向切面编程。
+无侵入式编程：不惊动原设计的基础上为其进行功能增强。简化共性代码的开发
+	
+核心概念：
+	-代理Proxy:SpringAOP的核心本质是采用代理模式实现。
+
+	-连接点JoinPoint：广义:程序执行的任意位置，粒度为：执行方法、抛出异常等
+					  SpringAOP:各类方法
+			 
+	-切入点Pointcut：SpringAOP中切入点负责匹配要追加功能的方法(连接点)
+	
+	-通知Advice：要在切入点执行的操作，也就是增添功能的方法
+	
+	-通知类@Aspect：包含通知方法的类
+	
+	-切面Aspect：描述通知与切入点的对应关系。切入点->(切面)<-通知
+		
+基本实现：
+	
+	1.准备好基本的连接点，和通知方法
+	2.配置切入点@Pointcut("excution(要连接的连接点)")，将切入点放在一个无返回值，无参数，无方法体的方法上。
+	3.配置切面@Before/@Aroud/.....("切入点的方法名")
+	4.将该切面类注册成组件@Component，并告知spring@Aspect该组件执行AOP操作。个人认为是为了生成动态代理对象Bean
+	5.在配置类中@EnableAspectJAutoPoxy，告知spring存在使用注解开发的AOP
+		
+AOP工作流程：核心机制是使用代理对象
+
+	1.Spring容器启动
+	2.读取所有切面配置中的切入点
+	3.初始化bean，判断bean对应类中的方法是否能匹配任意被读取的切入点。
+		-无法匹配：创建原对象
+		-成功匹配：创建原对象的代理对象作为bean
+	4.获取bean执行方法
+		-根据当前是原类对象还是代理对象调用方法。代理对象可以调用增强后的方法。
+	
+切入点表达式:excution(x xx..x())指定要切入的方法
+	-excution(修饰符(可省) 返回值类型 包名..类名(参数) 异常类型(可省))
+	-*:通配符，通配包名时表示任意但必须有一个。
+	-..:通配符，可以表示多级多个。
+	-'+':匹配子类/实现类
+	
+	!切入点表达式匹配接口方法和实现类方法是相同效果。!
+
+
+通知类型：方法前/方法后/返回结果后/抛出异常后/环绕通知
+	
+	@Aroud：环绕通知，需要添加一个ProceedingJointPoin参数代表原方法。pjp.proceed():调用原方法。
+	环绕通知需要接收返回值，并且返回返回值：生成的是代理对象，代理对象执行增强方法时不能改变原方法的结构。
+	当然，如果不需要也可以不获取不返回。
+	@Aroud("pt()")
+	public Object handleMethod(ProceedingJointPoint pjp) throw Throwable {
+		......
+		Object result = pjp.proceed();
+		......
+		return result;	
+	}
+	-在环绕方法中通过pjp.getXXX可以获取被代理的该方法的一些信息。
+
+通知获取数据：数据包括：参数，返回值，异常。环绕方法都可以获取，其他方法有的能获取，有的无法获取。
+	环绕方法使用：ProceedJointPoint
+	其他方法使用：JointPoint，并且必须设置为方法的第一个形参
+		
+14.事务：@Transactional注解表示spring中的事务。
+	-需要到配置类中声明@EnableTransactionManagement，表示开启事务。
+	-到管理类注册Spring事务管理器bean。
+	-@Transactional一般使用在接口类上而非实现类，解耦合，子类继承的方法会自动开启事务。
+	-spring的事务是可以到业务层的，对同一个业务下的多个数据操作统一管理
+
+实现：事务管理员和事务协调员
+	事务管理员(一般是业务层方法)发起事务T，将业务内部其他的事务(事务协调员)加入到T中形成同一个事务，就可以实现该业务的整体回滚和提交了。
+		
+相关属性配置：比较重要的如下两个属性
+	-rollbackFor：需要回滚的异常。默认情况下spring只回滚error和RuntimeException，其他异常不回滚
+	-propagation：事务的传播行为。事务协调员对于事务管理员新开事务的回应：加入统一管理的事务、新建事务独立运行、无反应、报错等
+			
 		
 		
 		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
+心得：	
+
+	1本章节中将spring开发从XML开发转换到注解开发，本质上是将XML配置文件转换成配置类。
+	那么对于需要注解才能生效的一些外部配置，例如@Aspect、@Transactional等，相当于XML中的一个独立大标签，
+	都需要去配置类中使用对应的注解声明，相当于加了最外层的标签，才能生效。
+	
+	2.spring中大量地体现了多态与继承的关系：
+	-对实现类/子类的定义(例如bean的注册)，可以通过接口/父类来调用获取；
+	-对父类/接口的控制(例如AOP)，会扩展到子类；
 		
 		
 		
